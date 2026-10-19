@@ -1,5 +1,5 @@
 // Geluidslicht: werkt ook offline nadat de app één keer geladen is.
-const CACHE = 'geluidslicht-v1';
+const CACHE = 'geluidslicht-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', event => {

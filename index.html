@@ -373,6 +373,11 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
     </div>
 
     <div class="ref">
+      <h3>Microfoon</h3>
+      <p class="hint" id="diag">Nog niet gestart.</p>
+    </div>
+
+    <div class="ref">
       <h3>Ter vergelijking</h3>
       <dl>
         <dt>30 dB</dt><dd>fluisteren</dd>
@@ -418,7 +423,7 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
     pctG: $('pctG'), pctA: $('pctA'), pctR: $('pctR'), peak: $('peak'), hist: $('history'),
     dialog: $('settings'), form: $('settingsForm'),
     orange: $('orange'), orangeOut: $('orangeOut'), red: $('red'), redOut: $('redOut'),
-    cal: $('cal'), calOut: $('calOut'), calNow: $('calNow'),
+    cal: $('cal'), calOut: $('calOut'), calNow: $('calNow'), diag: $('diag'),
     showNumber: $('showNumber'), showPlate: $('showPlate'),
     resetBtn: $('resetBtn'), stopBtn: $('stopBtn')
   };
@@ -432,6 +437,8 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
   let settings = loadSettings();
 
   let ctx = null, analyser = null, stream = null, freq = null, weights = null, demoTimer = 0;
+  let rawMode = true, micLabel = '', rawDb = -Infinity;
+  let silentSince = 0, silenceMsg = false, recovering = false, rebuilds = 0;
   let running = false, rafId = 0, lastT = 0, avgPower = 0, level = 0;
   let zone = 0, lowerSince = 0, lastText = 0, lastHist = 0;
   let zoneTime = [0, 0, 0];
@@ -504,9 +511,9 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
 
   function openSettings() {
     syncForm();
-    renderText();
     if (typeof els.dialog.showModal === 'function') els.dialog.showModal();
     else els.dialog.setAttribute('open', '');
+    renderText();
   }
   function closeSettings() {
     if (typeof els.dialog.close === 'function') els.dialog.close();
@@ -568,6 +575,7 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
 
   function frame(t) {
     rafId = requestAnimationFrame(frame);
+    if (!analyser) return;
     const dt = lastT ? Math.min((t - lastT) / 1000, 0.5) : 0;
     lastT = t;
 
@@ -578,6 +586,8 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
       if (v > -160) sum += Math.pow(10, v / 10) * weights[k];
     }
     const p = sum / WINDOW_POWER;
+    rawDb = p > 0 ? 10 * Math.log10(p) : -Infinity;
+    watchSilence(t, p);
     const tau = SPEEDS[settings.speed].tau;
     avgPower = avgPower ? avgPower + (p - avgPower) * (1 - Math.exp(-dt / tau)) : p;
     level = avgPower > 0 ? 10 * Math.log10(avgPower) + BASE_OFFSET + settings.cal : 0;
@@ -597,9 +607,22 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
   }
 
   function renderText() {
-    const shown = running ? Math.max(20, Math.round(level)) : '–';
+    const shown = running ? Math.max(0, Math.round(level)) : '–';
     els.db.textContent = shown;
     els.calNow.textContent = running ? shown + ' dB' : 'start eerst een meting';
+    if (els.dialog.open) els.diag.textContent = diagText();
+  }
+
+  function diagText() {
+    if (!running || !ctx) return 'Nog niet gestart.';
+    const states = { running: 'actief', suspended: 'gepauzeerd', interrupted: 'onderbroken', closed: 'gesloten' };
+    return [
+      demo ? 'Demosignaal' : (micLabel || 'Standaardmicrofoon'),
+      ctx.sampleRate + ' Hz',
+      'audio ' + (states[ctx.state] || ctx.state),
+      'signaal ' + (isFinite(rawDb) ? Math.round(rawDb) + ' dBFS' : 'geen'),
+      rawMode ? 'ruwe modus' : 'standaardmodus'
+    ].join(' · ');
   }
 
   function renderStats() {
@@ -613,7 +636,7 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
     const n = Math.min(histCount, HISTORY_LEN);
     let max = -Infinity;
     for (let i = 0; i < n; i++) max = Math.max(max, hist[i]);
-    els.peak.textContent = n ? Math.max(20, Math.round(max + settings.cal)) + ' dB' : '–';
+    els.peak.textContent = n ? Math.max(0, Math.round(max + settings.cal)) + ' dB' : '–';
   }
 
   function drawHistory() {
@@ -711,6 +734,87 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
     return 'De microfoon kon niet starten' + (err && err.message ? ': ' + err.message : '.');
   }
 
+  const RAW_AUDIO = { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+  const TAP_TO_START = 'Tik ergens op het scherm om de meting te starten.';
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  function onTrackEnded() {
+    stop();
+    setMsg('De microfoon werd losgekoppeld. Tik op Start om opnieuw te meten.', true);
+  }
+
+  async function openAudio() {
+    if (!demo) {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: rawMode ? RAW_AUDIO : true, video: false });
+      const track = stream.getAudioTracks()[0];
+      micLabel = (track && track.label) || '';
+      if (track) track.addEventListener('ended', onTrackEnded);
+    }
+    // De audiomotor pas aanmaken nadat de microfoon open is: op iPad blijft de microfoon anders soms stil.
+    const AC = window.AudioContext || window.webkitAudioContext;
+    ctx = new AC();
+    const source = demo ? demoSource(ctx) : ctx.createMediaStreamSource(stream);
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 4096;
+    analyser.smoothingTimeConstant = 0;
+    const mute = ctx.createGain();
+    mute.gain.value = 0;
+    source.connect(analyser);
+    analyser.connect(mute);
+    mute.connect(ctx.destination);
+    freq = new Float32Array(analyser.frequencyBinCount);
+    weights = buildWeights(ctx.sampleRate, analyser.fftSize);
+    if (ctx.state !== 'running') await Promise.race([ctx.resume().catch(() => {}), wait(800)]);
+  }
+
+  function teardownAudio() {
+    clearInterval(demoTimer);
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    if (ctx) ctx.close().catch(() => {});
+    stream = null; ctx = null; analyser = null;
+  }
+
+  function showSilence(text) {
+    silenceMsg = true;
+    setMsg(text, true);
+  }
+
+  // Een echte microfoon ruist altijd een beetje. Komt er volledige stilte binnen, dan loopt er iets mis.
+  function watchSilence(t, p) {
+    if (p > 1e-12) {
+      silentSince = 0;
+      if (silenceMsg) { silenceMsg = false; setMsg(''); }
+      return;
+    }
+    if (!silentSince) silentSince = t;
+    else if (t - silentSince > 2500 && !recovering) recover();
+  }
+
+  async function recover() {
+    recovering = true;
+    try {
+      if (ctx && ctx.state !== 'running') {
+        await Promise.race([ctx.resume().catch(() => {}), wait(800)]);
+        if (ctx && ctx.state !== 'running') showSilence(TAP_TO_START);
+      } else if (rebuilds < 2) {
+        // Eerst de microfoon opnieuw openen; lukt dat niet, dan met de geluidsverwerking van het toestel aan.
+        rebuilds++;
+        if (rebuilds === 2) rawMode = false;
+        teardownAudio();
+        await openAudio();
+        if (!rawMode) setMsg('De microfoon draait nu in standaardmodus. De kleuren werken, maar de dB-waarden zijn minder nauwkeurig.');
+      } else {
+        showSilence('De microfoon geeft geen geluid door. Kijk of een andere app de microfoon gebruikt, of sluit de browser volledig af en open de app opnieuw.');
+      }
+    } catch (err) {
+      stop();
+      setMsg(errText(err), true);
+    } finally {
+      silentSince = 0;
+      recovering = false;
+    }
+  }
+
   async function start() {
     setMsg('');
     if (!demo && !window.isSecureContext) {
@@ -721,41 +825,17 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
       setMsg('Deze browser kan de microfoon niet gebruiken. Probeer Chrome of Safari.', true);
       return;
     }
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) { setMsg('Deze browser ondersteunt geen audioverwerking.', true); return; }
+    if (!(window.AudioContext || window.webkitAudioContext)) {
+      setMsg('Deze browser ondersteunt geen audioverwerking.', true);
+      return;
+    }
 
     els.start.disabled = true;
     els.start.textContent = 'Microfoon openen…';
-    ctx = new AC();
-    ctx.resume().catch(() => {});
+    rawMode = true; rebuilds = 0; silentSince = 0; silenceMsg = false; rawDb = -Infinity;
 
     try {
-      let source;
-      if (demo) source = demoSource(ctx);
-      else {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-          video: false
-        });
-        source = ctx.createMediaStreamSource(stream);
-        const track = stream.getAudioTracks()[0];
-        if (track) track.addEventListener('ended', () => {
-          stop();
-          setMsg('De microfoon werd losgekoppeld. Tik op Start om opnieuw te meten.', true);
-        });
-      }
-      analyser = ctx.createAnalyser();
-      analyser.fftSize = 4096;
-      analyser.smoothingTimeConstant = 0;
-      const mute = ctx.createGain();
-      mute.gain.value = 0;
-      source.connect(analyser);
-      analyser.connect(mute);
-      mute.connect(ctx.destination);
-      freq = new Float32Array(analyser.frequencyBinCount);
-      weights = buildWeights(ctx.sampleRate, analyser.fftSize);
-      ctx.resume().catch(() => {});
-
+      await openAudio();
       running = true;
       avgPower = 0; lastT = 0; lastText = 0; lastHist = 0; lowerSince = 0;
       zoneTime = [0, 0, 0];
@@ -764,6 +844,7 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
       setZone(0);
       keepAwake();
       rafId = requestAnimationFrame(frame);
+      if (ctx.state !== 'running') showSilence(TAP_TO_START);
     } catch (err) {
       cleanup();
       setMsg(errText(err), true);
@@ -775,14 +856,12 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
 
   function cleanup() {
     cancelAnimationFrame(rafId);
-    clearInterval(demoTimer);
-    if (stream) stream.getTracks().forEach(t => t.stop());
-    if (ctx) ctx.close().catch(() => {});
-    stream = null; ctx = null; analyser = null;
+    teardownAudio();
   }
 
   function stop() {
     cleanup();
+    if (silenceMsg) { silenceMsg = false; setMsg(''); }
     running = false;
     body.classList.remove('is-running');
     body.dataset.zone = 'idle';
@@ -811,9 +890,10 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
       if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
     }
   });
-  document.addEventListener('pointerdown', () => {
+  // Op tablets telt pas het loslaten van een tik als toestemming om audio te starten.
+  ['pointerup', 'touchend', 'click'].forEach(type => document.addEventListener(type, () => {
     if (running && ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
-  });
+  }));
 
   // ---------- Volledig scherm ----------
   const root = document.documentElement;
