@@ -1,0 +1,853 @@
+<!doctype html>
+<html lang="nl-BE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Geluidslicht</title>
+<meta name="description" content="Kleurt groen, oranje of rood op basis van het geluidsniveau in dB.">
+<meta name="theme-color" content="#15181c" id="themeColor">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Geluidslicht">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: één instrument — bovenaan een schermvullend signaallicht, onderaan een donker frontpaneel met dB-schaal en de laatste 2 minuten. */
+:root {
+  --plate: #15181c;
+  --plate-raised: #1f242a;
+  --plate-line: #2e353d;
+  --plate-ink: #e8ecef;
+  --plate-muted: #96a0aa;
+  --idle: #262d35;
+  --idle-ink: #e8ecef;
+  --green: #2bb062;
+  --green-ink: #03200e;
+  --amber: #f5a300;
+  --amber-ink: #2b1b00;
+  --red: #e5383b;
+  --red-ink: #ffffff;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", system-ui, sans-serif;
+  --font-ui: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--plate);
+  color: var(--plate-ink);
+  font: 400 16px/1.45 var(--font-ui);
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+[hidden] { display: none !important; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+
+.app { height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+
+/* ---------- Het licht ---------- */
+.light {
+  --zone: var(--idle);
+  --zone-ink: var(--idle-ink);
+  --chip: rgba(255, 255, 255, .08);
+  background: var(--zone);
+  color: var(--zone-ink);
+  transition: background-color .45s ease, color .45s ease;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  min-height: 0;
+}
+body[data-zone="0"] .light { --zone: var(--green); --zone-ink: var(--green-ink); --chip: rgba(0, 0, 0, .12); }
+body[data-zone="1"] .light { --zone: var(--amber); --zone-ink: var(--amber-ink); --chip: rgba(0, 0, 0, .12); }
+body[data-zone="2"] .light { --zone: var(--red); --zone-ink: var(--red-ink); --chip: rgba(0, 0, 0, .16); }
+body.hide-plate .light { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-block: 12px;
+}
+.brand {
+  font: 700 22px/1 var(--font-display);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.brand-dots { display: inline-flex; flex-direction: column; gap: 3px; }
+.brand-dots i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .35; }
+body[data-zone="2"] .brand-dots i:nth-child(1),
+body[data-zone="1"] .brand-dots i:nth-child(2),
+body[data-zone="0"] .brand-dots i:nth-child(3) { opacity: 1; }
+.badge {
+  font: 600 12px/1 var(--font-ui);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: var(--chip);
+}
+.icon-btn {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 14px;
+  background: var(--chip);
+  cursor: pointer;
+}
+.icon-btn svg { width: 24px; height: 24px; }
+.icon-btn:active { transform: scale(.96); }
+
+.readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: min(2vh, 16px);
+  min-height: 0;
+  padding-bottom: 4vh;
+}
+.word {
+  font: 700 min(8.5vh, 7.5vw)/1 var(--font-display);
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+body.hide-number.is-running .word { font-size: min(20vh, 15vw); }
+.level {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: .08em;
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: .86;
+  font-variant-numeric: tabular-nums;
+}
+.level .num { font-size: min(30vh, 28vw); min-width: 2ch; text-align: right; }
+.level .unit { font-size: min(9vh, 8vw); opacity: .7; }
+body:not(.is-running) .level,
+body.hide-number .level { display: none; }
+
+.start {
+  margin-top: 8px;
+  min-height: 64px;
+  padding: 0 40px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--plate-ink);
+  color: var(--plate);
+  font: 700 26px/1 var(--font-display);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .35);
+}
+.start:disabled { opacity: .6; cursor: progress; }
+body.is-running .start { display: none; }
+.msg {
+  max-width: 34em;
+  margin: 0;
+  font-size: 16px;
+  opacity: .82;
+  text-wrap: pretty;
+}
+.msg:empty { display: none; }
+.msg.is-error { opacity: 1; font-weight: 500; }
+
+/* ---------- Frontpaneel ---------- */
+.plate {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr);
+  gap: 14px 32px;
+  align-items: start;
+  background: var(--plate);
+  border-top: 1px solid var(--plate-line);
+  padding-block: 14px calc(14px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+body.hide-plate .plate { display: none; }
+.panel { display: grid; gap: 10px; min-width: 0; }
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--plate-muted);
+}
+.panel-head b { color: var(--plate-ink); font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+
+.track { position: relative; height: 14px; display: flex; margin-top: 6px; }
+.seg { height: 100%; }
+.seg-g { background: var(--green); border-radius: 7px 0 0 7px; }
+.seg-a { background: var(--amber); }
+.seg-r { background: var(--red); border-radius: 0 7px 7px 0; }
+.marker {
+  position: absolute;
+  top: -7px;
+  bottom: -7px;
+  left: 0;
+  width: 5px;
+  margin-left: -2.5px;
+  border-radius: 3px;
+  background: var(--plate-ink);
+  box-shadow: 0 0 0 2px var(--plate);
+}
+body:not(.is-running) .marker { display: none; }
+.ticks { position: relative; height: 16px; font-size: 12px; color: var(--plate-muted); font-variant-numeric: tabular-nums; }
+.ticks span { position: absolute; top: 0; transform: translateX(-50%); }
+.ticks span:first-child { transform: none; }
+.ticks span:last-child { transform: translateX(-100%); }
+
+.stats { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; color: var(--plate-muted); }
+.stats span { display: inline-flex; align-items: center; gap: 7px; }
+.stats b { color: var(--plate-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot-g { background: var(--green); }
+.dot-a { background: var(--amber); }
+.dot-r { background: var(--red); }
+
+.history { width: 100%; height: 112px; display: block; }
+
+@media (max-width: 760px) {
+  .plate { grid-template-columns: minmax(0, 1fr); }
+  .history { height: 84px; }
+}
+@media (max-height: 520px) {
+  .history { height: 64px; }
+  .plate { padding-block: 8px calc(8px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* ---------- Instellingen ---------- */
+dialog {
+  width: min(560px, calc(100% - 32px));
+  max-height: min(92vh, 900px);
+  padding: 0;
+  border: 1px solid var(--plate-line);
+  border-radius: 18px;
+  background: var(--plate-raised);
+  color: var(--plate-ink);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .55);
+}
+dialog::backdrop { background: rgba(8, 10, 12, .62); }
+.sheet { padding: 22px 24px 20px; display: grid; gap: 22px; }
+.sheet h2 { margin: 0; font: 700 30px/1 var(--font-display); letter-spacing: .03em; text-transform: uppercase; }
+.field { display: grid; gap: 8px; border: 0; margin: 0; padding: 0; min-width: 0; }
+.field-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.field-head label, .field legend { font-weight: 600; font-size: 17px; padding: 0; }
+.field output { font: 700 22px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.hint { margin: 0; font-size: 14px; color: var(--plate-muted); text-wrap: pretty; }
+.hint b { color: var(--plate-ink); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--plate-ink); }
+#orange { accent-color: var(--amber); }
+#red { accent-color: var(--red); }
+
+.seg-ctl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 12px; background: var(--plate); }
+.seg-ctl label { position: relative; }
+.seg-ctl input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.seg-ctl span { display: grid; place-items: center; min-height: 44px; border-radius: 9px; font-weight: 600; text-align: center; line-height: 1.15; padding: 4px; }
+.seg-ctl span small { display: block; font-weight: 400; font-size: 12px; color: var(--plate-muted); }
+.seg-ctl input:checked + span { background: var(--plate-ink); color: var(--plate); }
+.seg-ctl input:checked + span small { color: var(--plate); opacity: .7; }
+.seg-ctl input:focus-visible + span { outline: 3px solid var(--plate-ink); outline-offset: 2px; }
+
+.checks { display: grid; gap: 4px; }
+.check { display: flex; align-items: center; gap: 12px; min-height: 44px; font-size: 16px; cursor: pointer; }
+.check input { width: 22px; height: 22px; margin: 0; accent-color: var(--plate-ink); }
+
+.ref { border-top: 1px solid var(--plate-line); padding-top: 16px; }
+.ref h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--plate-muted); }
+.ref dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; font-size: 14px; }
+.ref dt { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.ref dd { margin: 0; color: var(--plate-muted); }
+
+.sheet-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+.btn { min-height: 46px; padding: 0 20px; border-radius: 12px; border: 1px solid var(--plate-line); background: transparent; font-weight: 600; cursor: pointer; }
+.btn-primary { background: var(--plate-ink); color: var(--plate); border-color: var(--plate-ink); }
+.btn-left { margin-right: auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  .light { transition: none; }
+}
+</style>
+</head>
+<body data-zone="idle">
+<div class="app">
+  <main class="light">
+    <header class="bar">
+      <span class="brand"><span class="brand-dots" aria-hidden="true"><i></i><i></i><i></i></span>Geluidslicht</span>
+      <span class="badge" id="demoBadge" hidden>Demo</span>
+      <button class="icon-btn" id="fsBtn" type="button" aria-label="Volledig scherm" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
+      <button class="icon-btn" id="settingsBtn" type="button" aria-label="Instellingen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>
+      </button>
+    </header>
+
+    <section class="readout">
+      <div class="word" id="word" aria-live="polite">Klaar om te meten</div>
+      <div class="level" aria-label="Geluidsniveau"><span class="num" id="db">--</span><span class="unit">dB</span></div>
+      <button class="start" id="startBtn" type="button">Start meten</button>
+      <p class="msg" id="msg">Tik op Start. Je browser vraagt dan of de app de microfoon mag gebruiken. Alles gebeurt op dit toestel: er wordt niets opgenomen of verstuurd.</p>
+    </section>
+  </main>
+
+  <section class="plate" aria-label="Meter">
+    <div class="panel">
+      <div class="panel-head"><span>Niveau</span><span>Sinds start</span></div>
+      <div class="track" id="track" aria-hidden="true">
+        <div class="seg seg-g" id="segG"></div>
+        <div class="seg seg-a" id="segA"></div>
+        <div class="seg seg-r" id="segR"></div>
+        <div class="marker" id="marker"></div>
+      </div>
+      <div class="ticks" id="ticks" aria-hidden="true"></div>
+      <div class="stats">
+        <span><i class="dot dot-g"></i><b id="pctG">–</b> rustig</span>
+        <span><i class="dot dot-a"></i><b id="pctA">–</b> opgelet</span>
+        <span><i class="dot dot-r"></i><b id="pctR">–</b> te luid</span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><span>Laatste 2 minuten</span><span>Max <b id="peak">–</b></span></div>
+      <canvas class="history" id="history" aria-label="Verloop van het geluidsniveau tijdens de laatste 2 minuten"></canvas>
+    </div>
+  </section>
+</div>
+
+<dialog id="settings" aria-labelledby="settingsTitle">
+  <form class="sheet" method="dialog" id="settingsForm">
+    <h2 id="settingsTitle">Instellingen</h2>
+
+    <div class="field">
+      <div class="field-head"><label for="orange">Oranje vanaf</label><output id="orangeOut" for="orange">60 dB</output></div>
+      <input type="range" id="orange" min="35" max="95" step="1">
+    </div>
+
+    <div class="field">
+      <div class="field-head"><label for="red">Rood vanaf</label><output id="redOut" for="red">70 dB</output></div>
+      <input type="range" id="red" min="40" max="100" step="1">
+    </div>
+
+    <fieldset class="field">
+      <legend>Reactietijd</legend>
+      <div class="seg-ctl">
+        <label><input type="radio" name="speed" id="speedSnel" value="snel"><span>Snel<small>¼ seconde</small></span></label>
+        <label><input type="radio" name="speed" id="speedNormaal" value="normaal"><span>Normaal<small>1 seconde</small></span></label>
+        <label><input type="radio" name="speed" id="speedRustig" value="rustig"><span>Rustig<small>3 seconden</small></span></label>
+      </div>
+      <p class="hint">Bij Rustig maakt een korte knal (een vallend boek, een deur) het licht niet meteen rood. De kleur zakt pas terug als het even stiller blijft.</p>
+    </fieldset>
+
+    <div class="field">
+      <div class="field-head"><label for="cal">Kalibratie</label><output id="calOut" for="cal">+0 dB</output></div>
+      <input type="range" id="cal" min="-30" max="30" step="1">
+      <p class="hint">Elke tablet hoort anders. Leg hem naast een echte geluidsmeter (of een meter-app op je gsm) en schuif tot beide hetzelfde tonen. Nu gemeten: <b id="calNow">–</b></p>
+    </div>
+
+    <div class="checks">
+      <label class="check"><input type="checkbox" id="showNumber"> Toon het getal in dB</label>
+      <label class="check"><input type="checkbox" id="showPlate"> Toon meter en grafiek onderaan</label>
+    </div>
+
+    <div class="ref">
+      <h3>Ter vergelijking</h3>
+      <dl>
+        <dt>30 dB</dt><dd>fluisteren</dd>
+        <dt>40 dB</dt><dd>stille bibliotheek</dd>
+        <dt>60 dB</dt><dd>normaal gesprek</dd>
+        <dt>70 dB</dt><dd>druk klaslokaal of restaurant</dd>
+        <dt>80 dB</dt><dd>drukke straat</dd>
+        <dt>85 dB</dt><dd>vanaf hier is gehoorbescherming nodig bij lange blootstelling</dd>
+      </dl>
+    </div>
+
+    <div class="sheet-actions">
+      <button class="btn btn-left" type="button" id="resetBtn">Standaardwaarden</button>
+      <button class="btn" type="button" id="stopBtn" hidden>Meting stoppen</button>
+      <button class="btn btn-primary" type="submit" id="doneBtn">Klaar</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(() => {
+  'use strict';
+
+  const DEFAULTS = { orange: 60, red: 70, speed: 'normaal', cal: 0, showNumber: true, showPlate: true };
+  const SPEEDS = {
+    snel:    { tau: 0.25, hold: 1000 },
+    normaal: { tau: 1,    hold: 2000 },
+    rustig:  { tau: 3,    hold: 4000 }
+  };
+  const BASE_OFFSET = 100;              // dBFS -> geschatte dB(A) voor een gemiddelde tablet; fijnregelen met kalibratie
+  const WINDOW_POWER = 0.5 * 0.3046;    // Blackman-venster van de AnalyserNode, enkel positieve frequenties
+  const SCALE_MIN = 30, SCALE_MAX = 100;
+  const HISTORY_LEN = 480, HISTORY_STEP = 250; // 2 minuten aan 4 metingen per seconde
+  const WORDS = ['Rustig', 'Opgelet', 'Te luid'];
+  const STORE_KEY = 'geluidslicht.v1';
+
+  const $ = id => document.getElementById(id);
+  const body = document.body;
+  const els = {
+    word: $('word'), db: $('db'), start: $('startBtn'), msg: $('msg'), demoBadge: $('demoBadge'),
+    fsBtn: $('fsBtn'), settingsBtn: $('settingsBtn'), themeColor: $('themeColor'),
+    segG: $('segG'), segA: $('segA'), segR: $('segR'), marker: $('marker'), ticks: $('ticks'),
+    pctG: $('pctG'), pctA: $('pctA'), pctR: $('pctR'), peak: $('peak'), hist: $('history'),
+    dialog: $('settings'), form: $('settingsForm'),
+    orange: $('orange'), orangeOut: $('orangeOut'), red: $('red'), redOut: $('redOut'),
+    cal: $('cal'), calOut: $('calOut'), calNow: $('calNow'),
+    showNumber: $('showNumber'), showPlate: $('showPlate'),
+    resetBtn: $('resetBtn'), stopBtn: $('stopBtn')
+  };
+
+  const css = getComputedStyle(document.documentElement);
+  const color = name => css.getPropertyValue(name).trim();
+  const COLORS = { green: color('--green'), amber: color('--amber'), red: color('--red'), plate: color('--plate'), idle: color('--idle'), muted: color('--plate-muted') };
+  const ZONE_COLORS = [COLORS.green, COLORS.amber, COLORS.red];
+
+  const demo = location.hash === '#demo';
+  let settings = loadSettings();
+
+  let ctx = null, analyser = null, stream = null, freq = null, weights = null, demoTimer = 0;
+  let running = false, rafId = 0, lastT = 0, avgPower = 0, level = 0;
+  let zone = 0, lowerSince = 0, lastText = 0, lastHist = 0;
+  let zoneTime = [0, 0, 0];
+  const hist = new Float32Array(HISTORY_LEN);
+  let histCount = 0;
+  let wakeLock = null;
+
+  // ---------- Instellingen ----------
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (raw) {
+        const s = Object.assign({}, DEFAULTS, JSON.parse(raw));
+        if (!SPEEDS[s.speed]) s.speed = DEFAULTS.speed;
+        return s;
+      }
+    } catch (e) { /* geen opslag beschikbaar */ }
+    return Object.assign({}, DEFAULTS);
+  }
+  function saveSettings() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(settings)); } catch (e) { /* negeren */ }
+  }
+  const signed = n => (n > 0 ? '+' : n < 0 ? '−' : '+') + Math.abs(n);
+
+  function syncForm() {
+    els.orange.value = settings.orange;
+    els.red.value = settings.red;
+    els.cal.value = settings.cal;
+    els.orangeOut.textContent = settings.orange + ' dB';
+    els.redOut.textContent = settings.red + ' dB';
+    els.calOut.textContent = signed(settings.cal) + ' dB';
+    els.form.querySelector('input[name="speed"][value="' + settings.speed + '"]').checked = true;
+    els.showNumber.checked = settings.showNumber;
+    els.showPlate.checked = settings.showPlate;
+    els.stopBtn.hidden = !running;
+  }
+
+  function applySettings() {
+    body.classList.toggle('hide-number', !settings.showNumber);
+    body.classList.toggle('hide-plate', !settings.showPlate);
+    renderScale();
+    requestAnimationFrame(drawHistory);
+  }
+
+  function changed() {
+    saveSettings();
+    syncForm();
+    applySettings();
+    renderText();
+  }
+
+  els.orange.addEventListener('input', () => {
+    settings.orange = +els.orange.value;
+    if (settings.red <= settings.orange) settings.red = settings.orange + 1;
+    changed();
+  });
+  els.red.addEventListener('input', () => {
+    settings.red = +els.red.value;
+    if (settings.orange >= settings.red) settings.orange = settings.red - 1;
+    changed();
+  });
+  els.cal.addEventListener('input', () => { settings.cal = +els.cal.value; changed(); });
+  els.form.addEventListener('change', e => {
+    if (e.target.name === 'speed') { settings.speed = e.target.value; changed(); }
+  });
+  els.showNumber.addEventListener('change', () => { settings.showNumber = els.showNumber.checked; changed(); });
+  els.showPlate.addEventListener('change', () => { settings.showPlate = els.showPlate.checked; changed(); });
+  els.resetBtn.addEventListener('click', () => { settings = Object.assign({}, DEFAULTS); changed(); });
+  els.stopBtn.addEventListener('click', () => { stop(); closeSettings(); });
+
+  function openSettings() {
+    syncForm();
+    renderText();
+    if (typeof els.dialog.showModal === 'function') els.dialog.showModal();
+    else els.dialog.setAttribute('open', '');
+  }
+  function closeSettings() {
+    if (typeof els.dialog.close === 'function') els.dialog.close();
+    else els.dialog.removeAttribute('open');
+  }
+  els.settingsBtn.addEventListener('click', openSettings);
+  els.form.addEventListener('submit', e => { e.preventDefault(); closeSettings(); });
+  els.dialog.addEventListener('click', e => { if (e.target === els.dialog) closeSettings(); });
+
+  // ---------- Schaal ----------
+  const pct = L => (Math.min(SCALE_MAX, Math.max(SCALE_MIN, L)) - SCALE_MIN) / (SCALE_MAX - SCALE_MIN) * 100;
+
+  function renderScale() {
+    const o = pct(settings.orange), r = pct(settings.red);
+    els.segG.style.width = o + '%';
+    els.segA.style.width = (r - o) + '%';
+    els.segR.style.width = (100 - r) + '%';
+  }
+  function buildTicks() {
+    for (let v = SCALE_MIN; v <= SCALE_MAX; v += 10) {
+      const s = document.createElement('span');
+      s.textContent = v;
+      s.style.left = pct(v) + '%';
+      els.ticks.appendChild(s);
+    }
+  }
+
+  // ---------- Meting ----------
+  function aWeightPower(f) {
+    if (f <= 0) return 0;
+    const f2 = f * f;
+    const ra = (148693636 * f2 * f2) /
+      ((f2 + 424.36) * Math.sqrt((f2 + 11599.29) * (f2 + 544496.41)) * (f2 + 148693636));
+    return ra * ra * 1.584893; // +2,00 dB normalisatie bij 1 kHz
+  }
+  function buildWeights(sampleRate, fftSize) {
+    const w = new Float32Array(fftSize / 2);
+    for (let k = 0; k < w.length; k++) w[k] = aWeightPower(k * sampleRate / fftSize);
+    return w;
+  }
+
+  const zoneFor = L => (L >= settings.red ? 2 : L >= settings.orange ? 1 : 0);
+
+  function setZone(z) {
+    zone = z;
+    body.dataset.zone = String(z);
+    els.word.textContent = WORDS[z];
+    els.themeColor.setAttribute('content', ZONE_COLORS[z]);
+  }
+
+  function updateZone(t) {
+    const target = zoneFor(level);
+    if (target > zone) { setZone(target); lowerSince = 0; }
+    else if (target < zone) {
+      if (!lowerSince) lowerSince = t;
+      else if (t - lowerSince >= SPEEDS[settings.speed].hold) { setZone(target); lowerSince = 0; }
+    } else lowerSince = 0;
+  }
+
+  function frame(t) {
+    rafId = requestAnimationFrame(frame);
+    const dt = lastT ? Math.min((t - lastT) / 1000, 0.5) : 0;
+    lastT = t;
+
+    analyser.getFloatFrequencyData(freq);
+    let sum = 0;
+    for (let k = 1; k < freq.length; k++) {
+      const v = freq[k];
+      if (v > -160) sum += Math.pow(10, v / 10) * weights[k];
+    }
+    const p = sum / WINDOW_POWER;
+    const tau = SPEEDS[settings.speed].tau;
+    avgPower = avgPower ? avgPower + (p - avgPower) * (1 - Math.exp(-dt / tau)) : p;
+    level = avgPower > 0 ? 10 * Math.log10(avgPower) + BASE_OFFSET + settings.cal : 0;
+
+    updateZone(t);
+    zoneTime[zone] += dt;
+    els.marker.style.left = pct(level) + '%';
+
+    if (t - lastText >= 200) { lastText = t; renderText(); }
+    if (t - lastHist >= HISTORY_STEP) {
+      lastHist = t;
+      hist[histCount % HISTORY_LEN] = level - settings.cal;
+      histCount++;
+      drawHistory();
+      renderStats();
+    }
+  }
+
+  function renderText() {
+    const shown = running ? Math.max(20, Math.round(level)) : '–';
+    els.db.textContent = shown;
+    els.calNow.textContent = running ? shown + ' dB' : 'start eerst een meting';
+  }
+
+  function renderStats() {
+    const total = zoneTime[0] + zoneTime[1] + zoneTime[2];
+    const out = [els.pctG, els.pctA, els.pctR];
+    if (total < 0.5) { out.forEach(el => { el.textContent = '–'; }); }
+    else {
+      const p = zoneTime.map(v => Math.round(v / total * 100));
+      out.forEach((el, i) => { el.textContent = p[i] + '%'; });
+    }
+    const n = Math.min(histCount, HISTORY_LEN);
+    let max = -Infinity;
+    for (let i = 0; i < n; i++) max = Math.max(max, hist[i]);
+    els.peak.textContent = n ? Math.max(20, Math.round(max + settings.cal)) + ' dB' : '–';
+  }
+
+  function drawHistory() {
+    const c = els.hist;
+    const w = c.clientWidth, h = c.clientHeight;
+    if (!w || !h) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) {
+      c.width = Math.round(w * dpr);
+      c.height = Math.round(h * dpr);
+    }
+    const g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+
+    const labelW = 30, plotW = w - labelW, top = 6, bottom = h - 2;
+    const y = L => bottom - (Math.min(SCALE_MAX, Math.max(SCALE_MIN, L)) - SCALE_MIN) / (SCALE_MAX - SCALE_MIN) * (bottom - top);
+    const yO = y(settings.orange), yR = y(settings.red);
+
+    g.globalAlpha = 0.08;
+    g.fillStyle = COLORS.green; g.fillRect(0, yO, plotW, bottom - yO);
+    g.fillStyle = COLORS.amber; g.fillRect(0, yR, plotW, yO - yR);
+    g.fillStyle = COLORS.red;   g.fillRect(0, top, plotW, yR - top);
+    g.globalAlpha = 1;
+
+    const n = Math.min(histCount, HISTORY_LEN);
+    const bw = plotW / HISTORY_LEN;
+    for (let i = 0; i < n; i++) {
+      const L = hist[(histCount - n + i) % HISTORY_LEN] + settings.cal;
+      const x = plotW - (n - i) * bw;
+      const yy = y(L);
+      g.fillStyle = ZONE_COLORS[zoneFor(L)];
+      g.fillRect(x, yy, bw + 0.4, bottom - yy);
+    }
+
+    g.font = '600 12px Barlow, system-ui, sans-serif';
+    g.textBaseline = 'middle';
+    g.textAlign = 'left';
+    g.lineWidth = 1;
+    g.setLineDash([3, 4]);
+    const labelYR = Math.min(yR, yO - 13);
+    [[yO, yO, settings.orange, COLORS.amber], [yR, labelYR, settings.red, COLORS.red]].forEach(([ly, ty, v, col]) => {
+      const yy = Math.round(ly) + 0.5;
+      g.strokeStyle = col;
+      g.beginPath(); g.moveTo(0, yy); g.lineTo(plotW, yy); g.stroke();
+      g.fillStyle = col;
+      g.fillText(String(v), plotW + 6, Math.max(top + 4, ty));
+    });
+    g.setLineDash([]);
+
+    if (!n) {
+      g.fillStyle = COLORS.muted;
+      g.textAlign = 'center';
+      g.font = '500 14px Barlow, system-ui, sans-serif';
+      g.fillText('Nog geen metingen', plotW / 2, (top + bottom) / 2);
+    }
+  }
+
+  function demoSource(ac) {
+    const len = ac.sampleRate * 2;
+    const buf = ac.createBuffer(1, len, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = ac.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const gain = ac.createGain();
+    gain.gain.value = 0;
+    src.connect(gain);
+    src.start();
+    const script = [46, 52, 57, 63, 66, 72, 77, 74, 65, 58, 50];
+    let i = 0;
+    const step = () => {
+      const L = script[i++ % script.length];
+      gain.gain.setTargetAtTime(Math.sqrt(3) * Math.pow(10, (L - BASE_OFFSET) / 20), ac.currentTime, 0.4);
+    };
+    step();
+    demoTimer = setInterval(step, 2500);
+    return gain;
+  }
+
+  function setMsg(text, isError) {
+    els.msg.textContent = text;
+    els.msg.classList.toggle('is-error', !!isError);
+  }
+
+  function errText(err) {
+    const n = err && err.name;
+    if (n === 'NotAllowedError' || n === 'SecurityError')
+      return 'Geen toegang tot de microfoon. Sta de microfoon toe voor deze pagina (via het slotje naast het adres of in de instellingen van je browser) en tik opnieuw op Start.';
+    if (n === 'NotFoundError' || n === 'OverconstrainedError')
+      return 'Er werd geen microfoon gevonden op dit toestel.';
+    if (n === 'NotReadableError')
+      return 'De microfoon wordt al door een andere app gebruikt. Sluit die app en probeer opnieuw.';
+    return 'De microfoon kon niet starten' + (err && err.message ? ': ' + err.message : '.');
+  }
+
+  async function start() {
+    setMsg('');
+    if (!demo && !window.isSecureContext) {
+      setMsg('De microfoon werkt alleen als deze pagina via https:// geopend is.', true);
+      return;
+    }
+    if (!demo && !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+      setMsg('Deze browser kan de microfoon niet gebruiken. Probeer Chrome of Safari.', true);
+      return;
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { setMsg('Deze browser ondersteunt geen audioverwerking.', true); return; }
+
+    els.start.disabled = true;
+    els.start.textContent = 'Microfoon openen…';
+    ctx = new AC();
+    ctx.resume().catch(() => {});
+
+    try {
+      let source;
+      if (demo) source = demoSource(ctx);
+      else {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+          video: false
+        });
+        source = ctx.createMediaStreamSource(stream);
+        const track = stream.getAudioTracks()[0];
+        if (track) track.addEventListener('ended', () => {
+          stop();
+          setMsg('De microfoon werd losgekoppeld. Tik op Start om opnieuw te meten.', true);
+        });
+      }
+      analyser = ctx.createAnalyser();
+      analyser.fftSize = 4096;
+      analyser.smoothingTimeConstant = 0;
+      const mute = ctx.createGain();
+      mute.gain.value = 0;
+      source.connect(analyser);
+      analyser.connect(mute);
+      mute.connect(ctx.destination);
+      freq = new Float32Array(analyser.frequencyBinCount);
+      weights = buildWeights(ctx.sampleRate, analyser.fftSize);
+      ctx.resume().catch(() => {});
+
+      running = true;
+      avgPower = 0; lastT = 0; lastText = 0; lastHist = 0; lowerSince = 0;
+      zoneTime = [0, 0, 0];
+      histCount = 0;
+      body.classList.add('is-running');
+      setZone(0);
+      keepAwake();
+      rafId = requestAnimationFrame(frame);
+    } catch (err) {
+      cleanup();
+      setMsg(errText(err), true);
+    } finally {
+      els.start.disabled = false;
+      els.start.textContent = demo ? 'Start demo' : 'Start meten';
+    }
+  }
+
+  function cleanup() {
+    cancelAnimationFrame(rafId);
+    clearInterval(demoTimer);
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    if (ctx) ctx.close().catch(() => {});
+    stream = null; ctx = null; analyser = null;
+  }
+
+  function stop() {
+    cleanup();
+    running = false;
+    body.classList.remove('is-running');
+    body.dataset.zone = 'idle';
+    els.word.textContent = 'Gestopt';
+    els.themeColor.setAttribute('content', COLORS.plate);
+    releaseWake();
+    renderText();
+  }
+
+  // ---------- Scherm aan houden ----------
+  async function keepAwake() {
+    try {
+      if ('wakeLock' in navigator && document.visibilityState === 'visible' && !wakeLock) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      }
+    } catch (e) { wakeLock = null; }
+  }
+  function releaseWake() {
+    if (wakeLock) wakeLock.release().catch(() => {});
+    wakeLock = null;
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (running && document.visibilityState === 'visible') {
+      keepAwake();
+      if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
+    }
+  });
+  document.addEventListener('pointerdown', () => {
+    if (running && ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
+  });
+
+  // ---------- Volledig scherm ----------
+  const root = document.documentElement;
+  const requestFs = root.requestFullscreen || root.webkitRequestFullscreen;
+  const standalone = window.matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone === true;
+  els.fsBtn.hidden = !requestFs || standalone;
+  els.fsBtn.addEventListener('click', () => {
+    const current = document.fullscreenElement || document.webkitFullscreenElement;
+    try {
+      const p = current
+        ? (document.exitFullscreen || document.webkitExitFullscreen).call(document)
+        : requestFs.call(root);
+      if (p && p.catch) p.catch(() => {});
+    } catch (e) { /* niet ondersteund */ }
+  });
+
+  // ---------- Opstart ----------
+  els.start.addEventListener('click', start);
+  window.addEventListener('resize', () => requestAnimationFrame(drawHistory));
+  if (demo) {
+    els.demoBadge.hidden = false;
+    els.start.textContent = 'Start demo';
+    setMsg('Demomodus: de app speelt zelf een geluidsniveau af dat langzaam stijgt en daalt. De microfoon wordt niet gebruikt.');
+  }
+  buildTicks();
+  syncForm();
+  applySettings();
+  renderStats();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawHistory);
+
+  if ('serviceWorker' in navigator && window.isSecureContext) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>

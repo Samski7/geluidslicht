@@ -1,0 +1,17 @@
+{
+  "name": "Geluidslicht",
+  "short_name": "Geluidslicht",
+  "description": "Kleurt groen, oranje of rood op basis van het geluidsniveau in dB.",
+  "lang": "nl-BE",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#15181c",
+  "theme_color": "#15181c",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
