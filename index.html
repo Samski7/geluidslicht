@@ -127,14 +127,15 @@ body[data-zone="0"] .brand-dots i:nth-child(3) { opacity: 1; }
 }
 .info-btn svg { width: 22px; height: 22px; }
 
-/* Alleen kleur: tijdens het meten blijft enkel de Info-knop over, de rest komt tevoorschijn met die knop. */
+/* Kleur en getal: tijdens het meten blijven enkel de dB-waarde en de Info-knop over, de rest komt tevoorschijn met die knop. */
 body.is-running:not(.show-info) .brand,
 body.is-running:not(.show-info) .badge,
 body.is-running:not(.show-info) .icon-btn,
 body.is-running:not(.show-info) .word,
-body.is-running:not(.show-info) .level,
 body:not(.show-info) .plate { display: none; }
 body.is-running:not(.show-info) .info-btn { opacity: .75; }
+body.is-running:not(.show-info) .level .num { font-size: min(44vh, 38vw); }
+body.is-running:not(.show-info) .level .unit { font-size: min(13vh, 11vw); }
 
 .readout {
   display: flex;
