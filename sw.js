@@ -1,5 +1,5 @@
 // Geluidslicht: werkt ook offline nadat de app één keer geladen is.
-const CACHE = 'geluidslicht-v4';
+const CACHE = 'geluidslicht-v6';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', event => {
@@ -26,10 +26,12 @@ self.addEventListener('fetch', event => {
   const { request } = event;
   if (request.method !== 'GET') return;
 
-  // De pagina zelf: eerst het netwerk (zo komen updates meteen binnen), anders de cache.
+  // De pagina zelf: eerst het netwerk, langs de browsercache heen (zo komen updates meteen binnen), anders de cache.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).then(res => store(request, res)).catch(() => caches.match(request).then(hit => hit || caches.match('./')))
+      fetch(request.url, { cache: 'no-cache', credentials: 'same-origin' })
+        .then(res => store(request, res))
+        .catch(() => caches.match(request).then(hit => hit || caches.match('./')))
     );
     return;
   }
