@@ -1,4 +1,4 @@
-# Decibelmeter
+# Geluidslicht
 
 Een installeerbare web-app (PWA) die groen, oranje of rood kleurt op basis van het geluidsniveau in dB.
 Alles gebeurt op het toestel zelf: er wordt niets opgenomen of verstuurd.
@@ -14,20 +14,20 @@ Gratis aangeboden door Schildermans AI. Repetitieve taken sneller afhandelen met
 
 De microfoon en de service worker werken alleen via `https://` (of lokaal via `http://localhost`).
 Rechtstreeks openen als bestand (`file://`) werkt dus niet. Alle paden zijn relatief, zodat de app ook in een submap draait,
-bijvoorbeeld `https://gebruikersnaam.github.io/decibelmeter/`.
+bijvoorbeeld `https://gebruikersnaam.github.io/geluidslicht/`.
 
 ## Gratis hosten op GitHub Pages
 
-1. Maak op GitHub een (openbare) repository aan, bijvoorbeeld `decibelmeter`.
+1. Maak op GitHub een (openbare) repository aan, bijvoorbeeld `geluidslicht`.
 2. Zet de bestanden erin (vanuit deze map):
    ```bash
    git add .
-   git commit -m "Decibelmeter als PWA"
+   git commit -m "Geluidslicht als PWA"
    git push
    ```
 3. Ga op GitHub naar **Settings > Pages**.
 4. Kies bij **Source** voor **Deploy from a branch**, kies de branch `main` en de map `/ (root)`, en klik op **Save**.
-5. Na een minuutje staat de app op `https://gebruikersnaam.github.io/decibelmeter/`.
+5. Na een minuutje staat de app op `https://gebruikersnaam.github.io/geluidslicht/`.
 
 ## Of: gratis hosten op Netlify
 
@@ -38,7 +38,7 @@ bijvoorbeeld `https://gebruikersnaam.github.io/decibelmeter/`.
 ## Een nieuwe versie online zetten
 
 De service worker bewaart de app in een cache. Pas je iets aan, verhoog dan het versienummer bovenaan in `sw.js`
-(bv. `decibelmeter-v1` naar `decibelmeter-v2`). Anders blijven geïnstalleerde toestellen de oude versie tonen.
+(bv. `geluidslicht-v8` naar `geluidslicht-v9`). Anders blijven geïnstalleerde toestellen de oude versie tonen.
 Na een update krijg je de nieuwe versie bij de tweede keer dat je de app opent.
 
 ## Lokaal testen

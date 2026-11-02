@@ -1,8 +1,8 @@
-// Decibelmeter: werkt ook offline nadat de app één keer geladen is.
+// Geluidslicht: werkt ook offline nadat de app één keer geladen is.
 // Pas je een bestand aan, verhoog dan het versienummer: zo haalt de app de nieuwe bestanden op.
-const PREFIX = 'decibelmeter-';
-const CACHE = PREFIX + 'v1';
-const OLD_PREFIXES = [PREFIX, 'geluidslicht-'];
+const PREFIX = 'geluidslicht-';
+const CACHE = PREFIX + 'v8';
+const OLD_PREFIXES = [PREFIX, 'decibelmeter-'];
 const SHELL = [
   './',
   './index.html',

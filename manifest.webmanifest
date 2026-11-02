@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "Decibelmeter",
-  "short_name": "Decibelmeter",
+  "name": "Geluidslicht",
+  "short_name": "Geluidslicht",
   "description": "Kleurt groen, oranje of rood op basis van het geluidsniveau in dB.",
   "lang": "nl-BE",
   "start_url": "./",
