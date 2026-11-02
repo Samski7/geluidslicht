@@ -3,16 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Geluidslicht</title>
+<title>Decibelmeter</title>
 <meta name="description" content="Kleurt groen, oranje of rood op basis van het geluidsniveau in dB.">
 <meta name="theme-color" content="#15181c" id="themeColor">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Geluidslicht">
+<meta name="apple-mobile-web-app-title" content="Decibelmeter">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon-192.png" type="image/png">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icons/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
@@ -50,7 +51,7 @@ body {
 button, input { font: inherit; color: inherit; }
 :focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
 
-.app { height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+.app { height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; grid-template-columns: minmax(0, 1fr); }
 
 /* ---------- Het licht ---------- */
 .light {
@@ -62,6 +63,7 @@ button, input { font: inherit; color: inherit; }
   transition: background-color .45s ease, color .45s ease;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   padding-top: env(safe-area-inset-top, 0px);
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
@@ -70,7 +72,7 @@ button, input { font: inherit; color: inherit; }
 body[data-zone="0"] .light { --zone: var(--green); --zone-ink: var(--green-ink); --chip: rgba(0, 0, 0, .12); }
 body[data-zone="1"] .light { --zone: var(--amber); --zone-ink: var(--amber-ink); --chip: rgba(0, 0, 0, .12); }
 body[data-zone="2"] .light { --zone: var(--red); --zone-ink: var(--red-ink); --chip: rgba(0, 0, 0, .16); }
-body:not(.show-info) .light { padding-bottom: env(safe-area-inset-bottom, 0px); }
+body.is-running:not(.show-info) .light { padding-bottom: env(safe-area-inset-bottom, 0px); }
 
 .bar {
   display: flex;
@@ -87,6 +89,9 @@ body:not(.show-info) .light { padding-bottom: env(safe-area-inset-bottom, 0px); 
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 .brand-dots { display: inline-flex; flex-direction: column; gap: 3px; }
 .brand-dots i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .35; }
@@ -126,12 +131,22 @@ body[data-zone="0"] .brand-dots i:nth-child(3) { opacity: 1; }
   cursor: pointer;
 }
 .info-btn svg { width: 22px; height: 22px; }
+.icon-btn, .info-btn, .badge { flex: none; }
+
+/* Gsm: compactere bovenbalk; volledig scherm is daar overbodig (installeer de app). */
+@media (max-width: 480px) {
+  .bar { gap: 8px; }
+  .brand { font-size: 19px; gap: 8px; }
+  .info-btn { padding: 0 14px 0 11px; }
+  #fsBtn { display: none; }
+}
 
 /* Kleur en getal: tijdens het meten blijven enkel de dB-waarde en de Info-knop over, de rest komt tevoorschijn met die knop. */
 body.is-running:not(.show-info) .brand,
 body.is-running:not(.show-info) .badge,
 body.is-running:not(.show-info) .icon-btn,
 body.is-running:not(.show-info) .word,
+body.is-running:not(.show-info) .maker,
 body:not(.show-info) .plate { display: none; }
 body.is-running:not(.show-info) .info-btn { opacity: .75; }
 body.is-running:not(.show-info) .level .num { font-size: min(44vh, 38vw); }
@@ -201,7 +216,7 @@ body.is-running .start { display: none; }
   align-items: start;
   background: var(--plate);
   border-top: 1px solid var(--plate-line);
-  padding-block: 14px calc(14px + env(safe-area-inset-bottom, 0px));
+  padding-block: 14px;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
@@ -257,7 +272,7 @@ body:not(.is-running) .marker { display: none; }
 }
 @media (max-height: 520px) {
   .history { height: 64px; }
-  .plate { padding-block: 8px calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .plate { padding-block: 8px; }
 }
 
 /* ---------- Instellingen ---------- */
@@ -311,8 +326,39 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
 .btn-primary { background: var(--plate-ink); color: var(--plate); border-color: var(--plate-ink); }
 .btn-left { margin-right: auto; }
 
+/* ---------- Maker ---------- */
+.maker {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  background: var(--plate);
+  border-top: 1px solid var(--plate-line);
+  padding-block: 10px calc(10px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  text-align: center;
+  line-height: 1.4;
+}
+.maker p { margin: 0; }
+.maker-door { font-size: 12px; font-weight: 500; color: var(--plate-ink); }
+.maker-vraag, .maker-mail { font-size: 11px; color: var(--plate-muted); }
+.maker a { color: var(--plate-ink); }
+.splash {
+  position: fixed; inset: 0; z-index: 50;
+  display: grid; place-content: center; gap: 6px; padding: 24px; text-align: center;
+  background: var(--plate); color: var(--plate-ink);
+  transition: opacity .5s ease;
+}
+.splash.weg { opacity: 0; pointer-events: none; }
+.splash-app { font: 700 22px/1 var(--font-display); letter-spacing: .06em; text-transform: uppercase; color: var(--plate-muted); }
+.splash-door { margin-top: 18px; font-size: 13px; color: var(--plate-muted); }
+.splash-naam { font: 700 clamp(40px, 9vw, 72px)/1 var(--font-display); letter-spacing: .02em; text-transform: uppercase; }
+.splash-wat { font-size: 15px; }
+.splash-mail { margin-top: 10px; font-size: 14px; color: var(--plate-muted); }
+
 @media (prefers-reduced-motion: reduce) {
   .light { transition: none; }
+  .splash { transition: none; }
 }
 </style>
 </head>
@@ -320,7 +366,7 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
 <div class="app">
   <main class="light">
     <header class="bar">
-      <span class="brand"><span class="brand-dots" aria-hidden="true"><i></i><i></i><i></i></span>Geluidslicht</span>
+      <span class="brand"><span class="brand-dots" aria-hidden="true"><i></i><i></i><i></i></span>Decibelmeter</span>
       <span class="badge" id="demoBadge" hidden>Demo</span>
       <button class="icon-btn" id="fsBtn" type="button" aria-label="Volledig scherm" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
@@ -363,6 +409,20 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
       <canvas class="history" id="history" aria-label="Verloop van het geluidsniveau tijdens de laatste 2 minuten"></canvas>
     </div>
   </section>
+
+  <footer class="maker">
+    <p class="maker-door">Gratis aangeboden door Schildermans AI.</p>
+    <p class="maker-vraag">Repetitieve taken sneller afhandelen met AI?</p>
+    <p class="maker-mail">Mail naar <a href="mailto:schildermansai@gmail.com">schildermansai@gmail.com</a></p>
+  </footer>
+</div>
+
+<div class="splash" id="splash" role="presentation">
+  <div class="splash-app">Decibelmeter</div>
+  <div class="splash-door">gemaakt door</div>
+  <div class="splash-naam">Schildermans AI</div>
+  <div class="splash-wat">AI-automatisatie voor zelfstandigen en kleine bedrijven</div>
+  <div class="splash-mail">schildermansai@gmail.com</div>
 </div>
 
 <dialog id="settings" aria-labelledby="settingsTitle">
@@ -445,6 +505,13 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
 </dialog>
 
 <script>
+// Opstartscherm: kort tonen, dan vanzelf weg (of meteen bij een tik).
+(() => {
+  const splash = document.getElementById('splash');
+  const weg = () => { splash.classList.add('weg'); setTimeout(() => splash.remove(), 600); };
+  splash.addEventListener('click', weg, { once: true });
+  setTimeout(weg, 2200);
+})();
 (() => {
   'use strict';
 
@@ -1041,8 +1108,10 @@ input[type="range"] { width: 100%; height: 32px; margin: 0; accent-color: var(--
   renderStats();
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawHistory);
 
+  // Service worker voor offline gebruik en installatie; werkt enkel via https:// of op localhost.
   if ('serviceWorker' in navigator && window.isSecureContext) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js', { scope: './' })
+      .catch(err => console.warn('Service worker niet geregistreerd:', err));
   }
 })();
 </script>

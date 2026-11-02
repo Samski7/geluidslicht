@@ -1,15 +1,35 @@
-// Geluidslicht: werkt ook offline nadat de app één keer geladen is.
-const CACHE = 'geluidslicht-v6';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
+// Decibelmeter: werkt ook offline nadat de app één keer geladen is.
+// Pas je een bestand aan, verhoog dan het versienummer: zo haalt de app de nieuwe bestanden op.
+const PREFIX = 'decibelmeter-';
+const CACHE = PREFIX + 'v1';
+const OLD_PREFIXES = [PREFIX, 'geluidslicht-'];
+const SHELL = [
+  './',
+  './index.html',
+  './manifest.webmanifest',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/icon-maskable-512.png',
+  './icons/apple-touch-icon.png',
+  './icons/favicon-32.png'
+];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
+  // 'reload' gaat langs de browsercache heen, zodat een nieuwe versie echt de nieuwe bestanden bewaart.
+  event.waitUntil(
+    caches.open(CACHE)
+      .then(cache => cache.addAll(SHELL.map(url => new Request(url, { cache: 'reload' }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', event => {
+  // Enkel eigen oude caches opruimen: op github.io delen alle apps van één gebruiker hetzelfde domein.
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys
+        .filter(k => k !== CACHE && OLD_PREFIXES.some(p => k.startsWith(p)))
+        .map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -22,21 +42,18 @@ function store(request, response) {
   return response;
 }
 
+// Cache-first: eerst de cache, anders het netwerk (en dat dan bewaren, bv. de lettertypes van Google Fonts).
 self.addEventListener('fetch', event => {
   const { request } = event;
   if (request.method !== 'GET') return;
 
-  // De pagina zelf: eerst het netwerk, langs de browsercache heen (zo komen updates meteen binnen), anders de cache.
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request.url, { cache: 'no-cache', credentials: 'same-origin' })
-        .then(res => store(request, res))
-        .catch(() => caches.match(request).then(hit => hit || caches.match('./')))
+      caches.match('./index.html').then(hit => hit || fetch(request).then(res => store(request, res)))
     );
     return;
   }
 
-  // Iconen, manifest en lettertypes: eerst de cache.
   event.respondWith(
     caches.match(request).then(hit => hit || fetch(request).then(res => store(request, res)))
   );
